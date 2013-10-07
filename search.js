@@ -42,14 +42,22 @@ jQuery.fn.sortElements = (function(){
 
   };
 })();
+
+// Array values to object keys
 function oc(a) {
   var o = {};
-  for(var i=0;i<a.length;i++) {
-    o[a[i]]='';
-  }
+  for(var i=0;i<a.length;i++) { o[a[i]]=''; }
   return o;
 }
+var cache_put = function(cache, id, value) {
+  localStorage['tv_list_cache' + cache + '_cache' + id] = JSON.stringify(value);
+};
+var cache_get = function(cache, id) {
+  var json = localStorage['tv_list_cache' + cache + '_cache' + id];
+  return json ? JSON.parse(json) : json;
+};
 $(document).ready(function(){
+  // Prepare the spaghetti code:
   var now = new Date().getTime();
   var showlist = {}; // <- is saved / recovered
   var registered = [];
@@ -57,10 +65,14 @@ $(document).ready(function(){
   var list = {};
   var i;
   var loading = true;
-  var updateListing = function(){
+  // Update the listing
+  // - is called whenever:
+  var updateListing = function() {
+    // Should the list be saved to file?
     var save = false;
     for (var i in showlist) {
       if (!(i in oc(registered))) {
+        save = true;
         var show = showlist[i];
         list[i] = {
           container:$('<li>'),
@@ -80,36 +92,47 @@ $(document).ready(function(){
             list[i].previous
           )
         );
+
+        // Attach the list to DOM
         html_list.append(list[i].container);
-        getSeasonNumber(show.tvdb_id, getEpisodes);
-        //console.log(show);
+
+        // Calls get_episodes with the newest season number
+        get_season_number(show.tvdb_id, get_episodes);
+
+        // Register the show:
         registered.push(i);
-        save = true;
       }
     }
     if (!loading && save) {
+      // Save the list to file
       saveList();
     }
   };
-  $.getJSON('show.json', function(data){
+  $.getJSON('show.json', function(data) {
+    // Retrieve the local list of shows:
     for (var i in data) {
       var show = data[i];
       showlist[show.tvdb_id] = show;
     }
+    // Put the list in html and retrieve the show data
     updateListing();
     loading = false;
   });
 
   var results = $('ul#search-results');
   var searching = false;
-  $('form').submit(function(){
+
+  // Search for new shows
+  $('form').submit(function() {
+    // Don't trigger a new search if there is an ongoing one
     if (!searching) {
-      console.log('searching for:' + $('#search').val());
-      $.getJSON('api.php?search=' + encodeURIComponent($('#search').val()), function(data){
+      // The search function requires spaces to be +'s
+      var search_string = $('#search').val().replace(' ', '+');
+      $.getJSON('api.php?search=' + encodeURIComponent(search_string), function(data){
         //console.log(data);
         results.html(''); // Clear list
         var show;
-        var click = function(){
+        var select_show = function(){
           var storage = show;
           return function(){
             showlist[storage.tvdb_id] = storage;
@@ -119,7 +142,7 @@ $(document).ready(function(){
         for (var series in data) {
           show = data[series];
           results.append(
-            $('<li>').text(show.title).click(click())
+            $('<li>').text(show.title).click(select_show())
           );
         }
         results.removeClass('fade');
@@ -133,30 +156,47 @@ $(document).ready(function(){
     return false;
   });
 
-  var saveList = function(){
-    console.log('Saving list');
+  var saveList = function() {
+    // Save list to disk
     $.post('api.php', showlist);
   };
 
   // Function callbacks the latest season data
-  var getSeasonNumber = function(show_id, callback) {
-    $.getJSON('api.php?seasons=' + show_id,function(data){
-      var season = {season:-1};
-      for (var i in data) {
-        if (data[i].season > season.season) {
-          season = data[i];
-        }
-      }
-      // console.log(season);
-      season.show_id = show_id;
+  var get_season_number = function(show_id, callback) {
+    // Look for the season in the cache
+    var season = cache_get('season', show_id);
+    if (season) {
       callback(season);
-    });
+    }
+    else {
+      // If the cache yielded no result, retrieve new data:
+      $.getJSON('api.php?seasons=' + show_id,function(data){
+        var season = {season:-1};
+        for (var i in data) {
+          if (data[i].season > season.season) {
+            season = data[i];
+          }
+        }
+        season.show_id = show_id;
+
+        // Put the show in cache
+        cache_put('season', show_id, season);
+
+        // Do something with the results
+        callback(season);
+      });
+    }
   };
 
+  // Sort the results as they pop in
   var sort_results = function () {
     $('ul#list li').sortElements(function(a, b){
-      var astr = $(a).find('.prev').next().text();
-      var bstr = $(b).find('.prev').next().text();
+      var astr = $(a).find('dd.prev').text();
+      var bstr = $(b).find('dd.prev').text();
+
+      if (astr === '') {
+        return 1;
+      }
       var ai = parseInt(astr.match(/^[^d]*/)[0], 10);
       var bi = parseInt(bstr.match(/^[^d]*/)[0], 10);
       return ai > bi ? 1 : -1;
@@ -166,17 +206,23 @@ $(document).ready(function(){
   };
 
   // Function callbacks the previous and next episode
-  var getEpisodes = function(season) {
+  var get_episodes = function(season) {
     var previous = false;
     var next = false;
-    $.getJSON('api.php?season=' + season.season+ '&id=' + season.show_id, function(data){
+    var sort_episodes = function(data) {
+      cache_put('episodes', season.season + '_' + season.show_id, data);
       for (var i in data) {
-        var d = new Date();
         var episode = data[i];
-        d.setTime(episode.first_aired*1000);
+
+        // Get the date of the episode
+        var d = new Date();
+        d.setTime(episode.first_aired * 1000);
+
+        // Convert air date to days ago / to
         episode.air_date = d.toString();
-        episode.days = (now/1000 - episode.first_aired)/(24*60*60);
-        // console.log(episode);
+        episode.days = (now / 1000 - episode.first_aired) / (24 * 60 * 60);
+
+        // Split episodes into next and previous
         // Less than 0.5 days ago
         if (episode.days < 0.5) {
           // No existing episode
@@ -199,8 +245,19 @@ $(document).ready(function(){
           }
         }
       }
-      //console.log('147 is where the party\'s at');
+
       if (list.hasOwnProperty(season.show_id)){
+        if (next) {
+          list[season.show_id].next.text(
+            Math.round(0 - next.days) +
+            'd S' + season.season + 'E' + next.episode
+          );
+          if (next.episode == 1) {
+            // First episode of season
+            // The previos episode does not exist or belongs to the previous season
+            previous = false;
+          }
+        }
         if (previous) {
           list[season.show_id].previous.text(
             Math.round(previous.days) +
@@ -208,14 +265,16 @@ $(document).ready(function(){
             );
           sort_results();
         }
-        if (next) {
-          list[season.show_id].next.text(
-            Math.round(next.days) +
-            'd S' + season.season + 'E' + next.episode
-            );
-        }
       }
-    });
+    };
+
+    var episodes = cache_get('episodes', season.season + '_' + season.show_id);
+    if (episodes) {
+      sort_episodes(episodes);
+    }
+    else {
+      $.getJSON('api.php?season=' + season.season+ '&id=' + season.show_id, sort_episodes);
+    }
   };
   /*
   $.getJSON('api.php?seasons=260485',function(data){

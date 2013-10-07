@@ -1,11 +1,31 @@
+
+$base03:    #002b36;
+$base02:    #073642;
+$base01:    #586e75;
+$base00:    #657b83;
+$base0:     #839496;
+$base1:     #93a1a1;
+$base2:     #eee8d5;
+$base3:     #fdf6e3;
+$yellow:    #b58900;
+$orange:    #cb4b16;
+$red:       #dc322f;
+$magenta:   #d33682;
+$violet:    #6c71c4;
+$blue:      #268bd2;
+$cyan:      #2aa198;
+$green:     #859900;
+
 body{
   font-family: arial;
+  background: $base03;
+  color: $base0;
+    -webkit-font-smoothing: antialiased;
+
 }
 * {
   box-sizing: border-box;
 }
-$blue: #499;
-$even: #677;
 ul{
   min-height: 20px;
   max-width: 450px;
@@ -14,19 +34,20 @@ ul{
   padding: 0;
   margin: 0;
   li{
-    padding: 4px;
-    -webkit-transition: all 1s;
-    background: $blue;
+    padding: 8px;
+    -webkit-transition: all 0.2s;
+    background: $base02;
     cursor:pointer;
-    color: #FFF;
+    color: $blue;
     &:hover{
-      background:lighten($blue, 10%);
+      background:darken($base02, 1.5%);
     }
 
     &.even {
-      background: $even;
+      color: $red;
+      background: lighten($base02, 1.5%);
       &:hover {
-        background: lighten($even, 10%);
+        background: lighten($base02, 3%);
       }
     }
     &:after{
@@ -38,7 +59,7 @@ label{
   display:block;
 }
 h1,h2{
-  color: #603;
+  //color: $cyan;
 }
 .fade {
   opacity: .5;
